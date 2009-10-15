@@ -40,7 +40,7 @@ zend_module_entry fuse_module_entry = {
 	PHP_RINIT(fuse),     /* Replace with NULL if there is nothing to do at request start */
 	PHP_RSHUTDOWN(fuse), /* Replace with NULL if there is nothing to do at request end   */
 	PHP_MINFO(fuse),
-	"0.9.1", 
+	"0.9.2", 
 	STANDARD_MODULE_PROPERTIES
 };
 /* }}} */
@@ -1936,7 +1936,7 @@ PHP_RSHUTDOWN_FUNCTION(fuse) {
 PHP_MINFO_FUNCTION(fuse) {
 	php_info_print_box_start(0);
 	php_printf("<p>FUSE(File system in USEr space) Bindings for PHP</p>\n");
-	php_printf("<p>Version 0.9.1 (2008-01-23)</p>\n");
+	php_printf("<p>Version 0.9.2 (2009-10-15)</p>\n");
 	php_info_print_box_end();
 }
 /* }}} */
