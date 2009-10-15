@@ -46,6 +46,7 @@ extern "C" {
 #include <fcntl.h>
 #define	FUSE_USE_VERSION	22
 #define	_FILE_OFFSET_BITS	64
+#include <pthread.h>
 #include <fuse.h>
 
 #ifdef  __cplusplus
@@ -56,6 +57,8 @@ extern "C" {
 typedef struct _php_fuse_object {
 	zend_object		zo;
 } php_fuse_object;
+
+pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
 
 ZEND_BEGIN_MODULE_GLOBALS(fuse)
 	zval			*active_object;
