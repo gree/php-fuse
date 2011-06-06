@@ -77,7 +77,11 @@ static zval* php_fuse_call_method(zval **object_pp, zend_class_entry *obj_ce, ze
 
 	fci.size = sizeof(fci);
 	/*fci.function_table = NULL; will be read form zend_class_entry of object if needed */
+#if PHP_VERSION_ID < 50300
 	fci.object_pp = object_pp;
+#else
+	fci.object_ptr = *object_pp;
+#endif
 	fci.function_name = &z_fname;
 	fci.retval_ptr_ptr = retval_ptr_ptr ? retval_ptr_ptr : &retval;
 	fci.param_count = param_count;
@@ -115,7 +119,11 @@ static zval* php_fuse_call_method(zval **object_pp, zend_class_entry *obj_ce, ze
 			fcic.function_handler = *fn_proxy;
 		}
 		fcic.calling_scope = obj_ce;
+#if PHP_VERSION_ID < 50300
 		fcic.object_pp = object_pp;
+#else
+		fcic.object_ptr = *object_pp;
+#endif
 		result = zend_call_function(&fci, &fcic TSRMLS_CC);
 	}
 	if (result == FAILURE) {
@@ -1526,8 +1534,12 @@ static zend_object_value php_fuse_object_handler_new(zend_class_entry *ce TSRMLS
 	zend_hash_copy(intern->zo.properties, &ce->default_properties, (copy_ctor_func_t)zval_add_ref, (void*)&tmp, sizeof(zval*));
 
 	retval.handle = zend_objects_store_put(intern, (zend_objects_store_dtor_t)zend_objects_destroy_object, (zend_objects_free_object_storage_t)php_fuse_object_free_storage, NULL TSRMLS_CC);
-    retval.handlers = EG(ze1_compatibility_mode) ? &php_fuse_object_handlers_ze1 : &php_fuse_object_handlers;
-	
+#if PHP_VERSION_ID < 50300
+	retval.handlers = EG(ze1_compatibility_mode) ? &php_fuse_object_handlers_ze1 : &php_fuse_object_handlers;
+#else
+	retval.handlers = &php_fuse_object_handlers;
+#endif
+
 	return retval;
 }
 /* }}} */
