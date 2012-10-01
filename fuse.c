@@ -22,7 +22,7 @@
 #define MAKE_LONG_ZVAL(name, val)	MAKE_STD_ZVAL(name); ZVAL_LONG(name, val);
 
 /* {{{ fuse_functions[] */
-function_entry fuse_functions[] = {
+zend_function_entry fuse_functions[] = {
 	{ NULL, NULL, NULL }
 };
 /* }}} */
@@ -1531,7 +1531,11 @@ static zend_object_value php_fuse_object_handler_new(zend_class_entry *ce TSRMLS
 	memset(intern, 0, sizeof(php_fuse_object));
 
 	zend_object_std_init(&intern->zo, ce TSRMLS_CC);
+#if PHP_VERSION_ID < 50399
 	zend_hash_copy(intern->zo.properties, &ce->default_properties, (copy_ctor_func_t)zval_add_ref, (void*)&tmp, sizeof(zval*));
+#else
+	object_properties_init(&(intern->zo), ce);
+#endif
 
 	retval.handle = zend_objects_store_put(intern, (zend_objects_store_dtor_t)zend_objects_destroy_object, (zend_objects_free_object_storage_t)php_fuse_object_free_storage, NULL TSRMLS_CC);
 #if PHP_VERSION_ID < 50300
