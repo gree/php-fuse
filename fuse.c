@@ -1556,30 +1556,65 @@ static PHP_METHOD(Fuse, mount) {
 
 	const char *path = NULL;
 	int path_len = 0;
-	const char *option = NULL;
-	int option_len = 0;
+	zval* optarray;		//array of Fuse options
+	HashTable* opthash;	//HashTable of the array
+	HashPosition optptr;	//Pointer to the position in the array
+	int optsize;		//Size of the options array
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s|s", &path, &path_len, &option, &option_len) == FAILURE) {
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s|a", &path, &path_len, &optarray) == FAILURE) {
 		return;
 	}
 
 	FUSEG(active_object) = object;
 
-	// currently no mount options are supported:(
-	int argc = 2;
-	if (option && option_len > 0) {
-		argc += 2;
-	}
-	char **argv = emalloc(sizeof(char*)*argc);
+	opthash=Z_ARRVAL_P(optarray);
+	optsize=zend_hash_num_elements(opthash);
+
+	int argc = 2+(2*optsize); //2 fixed elements (php_fuse,mountpoint), and optsize additional args	and a "-o" per arg
+	char **argv = safe_emalloc(sizeof(char*),argc,0);
+	char **elements=safe_emalloc(sizeof(char*),optsize,0); //to store the converted $options entries
 	char *p = estrdup(path);
-	char *q = estrdup(option);
 
 	int i = 0;
 	*(argv + i++) = "php_fuse";
-	if (option && option_len > 0) {
-		*(argv + i++) = "-o";
-		*(argv + i++) = q;
+	
+	//Now join argv with the user-supplied arguments
+	int j=-1;
+	zval** data;
+	for(zend_hash_internal_pointer_reset_ex(opthash, &optptr); zend_hash_get_current_data_ex(opthash, (void**) &data, &optptr) == SUCCESS; zend_hash_move_forward_ex(opthash, &optptr)) {
+		j++;
+		char* key;
+		int key_len;
+		long index;
+		
+		//resulting element
+		char* element;
+		int elsize;
+		
+		int valtype=Z_TYPE_PP(data);
+		
+		if (Z_TYPE_PP(data) != IS_STRING) { //element is not a string, convert instead
+			zend_error(E_WARNING,"Fuse.mount: Option %d is not a string, but type %d instead. Converting silently.",j,Z_TYPE_PP(data));
+			convert_to_string_ex(data);
+		}
+		if (zend_hash_get_current_key_ex(opthash, &key, &key_len, &index, 0, &optptr) == HASH_KEY_IS_STRING) { //string=>string
+			//string key => the end value must be key=value
+			elsize=key_len+1+Z_STRLEN_PP(data); //key_len+'='+data_len, for unknown reasons one of them includes a nullbyte?!
+			element=safe_emalloc(elsize,sizeof(char),0);
+			memset(element,0,elsize);
+			strncat(element,key,key_len);
+			strncat(element,"=",1);
+			strncat(element,Z_STRVAL_PP(data),Z_STRLEN_PP(data));		
+			
+		} else { //int (or resource, or whatever)=>string, only use the value
+			elsize=Z_STRLEN_PP(data);
+			element=estrdup(Z_STRVAL_PP(data));
+		}
+		*(argv + i++)="-o";
+		*(argv + i++)=element;
+		*(elements + j)=element;
 	}
+
 	*(argv + i++) = p;
 
 	struct fuse_operations op;
@@ -1655,9 +1690,12 @@ static PHP_METHOD(Fuse, mount) {
 
 	fuse_main(argc, argv, &op);
 
-	efree(q);
 	efree(p);
 	efree(argv);
+	
+	for(i=0;i<optsize;i++)
+		efree(elements[i]);
+	efree(elements);
 
 	FUSEG(active_object) = NULL;
 
@@ -1890,6 +1928,7 @@ PHP_MINIT_FUNCTION(fuse) {
 	REGISTER_LONG_CONSTANT("FUSE_EPIPE", EPIPE, CONST_CS | CONST_PERSISTENT);
 	REGISTER_LONG_CONSTANT("FUSE_EDOM", EDOM, CONST_CS | CONST_PERSISTENT);
 	REGISTER_LONG_CONSTANT("FUSE_ERANGE", ERANGE, CONST_CS | CONST_PERSISTENT);
+	REGISTER_LONG_CONSTANT("FUSE_ENOSYS", ENOSYS, CONST_CS | CONST_PERSISTENT);
 
 	REGISTER_LONG_CONSTANT("FUSE_DT_UKNOWN", DT_UNKNOWN, CONST_CS | CONST_PERSISTENT);
 	REGISTER_LONG_CONSTANT("FUSE_DT_REG", DT_REG, CONST_CS | CONST_PERSISTENT);
