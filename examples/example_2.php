@@ -52,5 +52,5 @@ class Sample2Fuse extends Fuse {
 }
 
 $fuse = new Sample2Fuse();
-$fuse->mount("/tmp/phpfusemount", "allow_other");
+$fuse->mount("/tmp/phpfusemount", array("allow_other","debug","uid"=>"20000"));
 ?>
