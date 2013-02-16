@@ -1556,30 +1556,42 @@ static PHP_METHOD(Fuse, mount) {
 
 	const char *path = NULL;
 	int path_len = 0;
-	const char *option = NULL;
-	int option_len = 0;
+	zval* optarray;		//array of Fuse options
+	HashTable* opthash;	//HashTable of the array
+	HashPosition optptr;	//Pointer to the position in the array
+	int optsize;		//Size of the options array
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s|s", &path, &path_len, &option, &option_len) == FAILURE) {
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s|a", &path, &path_len, &optarray) == FAILURE) {
 		return;
 	}
 
 	FUSEG(active_object) = object;
 
-	// currently no mount options are supported:(
 	int argc = 2;
-	if (option && option_len > 0) {
-		argc += 2;
-	}
+	opthash=Z_ARRVAL_P(optarray);
+	optsize=zend_hash_num_elements(opthash);
+	php_printf("Options array size %d\n",optsize);
+	
 	char **argv = emalloc(sizeof(char*)*argc);
 	char *p = estrdup(path);
-	char *q = estrdup(option);
 
 	int i = 0;
 	*(argv + i++) = "php_fuse";
-	if (option && option_len > 0) {
-		*(argv + i++) = "-o";
-		*(argv + i++) = q;
+	
+	//Now join argv with the user-supplied arguments
+	int j=-1;
+	zval** data;
+	for(zend_hash_internal_pointer_reset_ex(opthash, &optptr); zend_hash_get_current_data_ex(opthash, (void**) &data, &optptr) == SUCCESS; zend_hash_move_forward_ex(opthash, &optptr)) {
+		j++;
+		if (Z_TYPE_PP(data) != IS_STRING) {
+			zend_error(E_WARNING,"Fuse.mount: Option %d is not a string, but %d!",j,Z_TYPE_PP(data));
+			continue;
+		}
+		php_printf("Read argument %d: ",j);
+		php_write(Z_STRVAL_PP(data),Z_STRLEN_PP(data));
+		php_printf("\n");
 	}
+
 	*(argv + i++) = p;
 
 	struct fuse_operations op;
@@ -1653,9 +1665,11 @@ static PHP_METHOD(Fuse, mount) {
 
 	add_property_string(object, "_mount_point", p, 1);
 
+	for(i=0; i < argc; i++)
+		php_printf("php_fuse argc[%d/%d]: %s\n",i+1,argc,argv[i]);
+
 	fuse_main(argc, argv, &op);
 
-	efree(q);
 	efree(p);
 	efree(argv);
 
