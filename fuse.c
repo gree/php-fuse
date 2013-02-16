@@ -1567,12 +1567,12 @@ static PHP_METHOD(Fuse, mount) {
 
 	FUSEG(active_object) = object;
 
-	int argc = 2;
 	opthash=Z_ARRVAL_P(optarray);
 	optsize=zend_hash_num_elements(opthash);
-	php_printf("Options array size %d\n",optsize);
-	
-	char **argv = emalloc(sizeof(char*)*argc);
+
+	int argc = 2+(2*optsize); //2 fixed elements (php_fuse,mountpoint), and optsize additional args	and a "-o" per arg
+	char **argv = safe_emalloc(sizeof(char*),argc,0);
+	char **elements=safe_emalloc(sizeof(char*),optsize,0); //to store the converted $options entries
 	char *p = estrdup(path);
 
 	int i = 0;
@@ -1583,13 +1583,36 @@ static PHP_METHOD(Fuse, mount) {
 	zval** data;
 	for(zend_hash_internal_pointer_reset_ex(opthash, &optptr); zend_hash_get_current_data_ex(opthash, (void**) &data, &optptr) == SUCCESS; zend_hash_move_forward_ex(opthash, &optptr)) {
 		j++;
-		if (Z_TYPE_PP(data) != IS_STRING) {
-			zend_error(E_WARNING,"Fuse.mount: Option %d is not a string, but %d!",j,Z_TYPE_PP(data));
-			continue;
+		char* key;
+		int key_len;
+		long index;
+		
+		//resulting element
+		char* element;
+		int elsize;
+		
+		int valtype=Z_TYPE_PP(data);
+		
+		if (Z_TYPE_PP(data) != IS_STRING) { //element is not a string, convert instead
+			zend_error(E_WARNING,"Fuse.mount: Option %d is not a string, but type %d instead. Converting silently.",j,Z_TYPE_PP(data));
+			convert_to_string_ex(data);
 		}
-		php_printf("Read argument %d: ",j);
-		php_write(Z_STRVAL_PP(data),Z_STRLEN_PP(data));
-		php_printf("\n");
+		if (zend_hash_get_current_key_ex(opthash, &key, &key_len, &index, 0, &optptr) == HASH_KEY_IS_STRING) { //string=>string
+			//string key => the end value must be key=value
+			elsize=key_len+1+Z_STRLEN_PP(data); //key_len+'='+data_len, for unknown reasons one of them includes a nullbyte?!
+			element=safe_emalloc(elsize,sizeof(char),0);
+			memset(element,0,elsize);
+			strncat(element,key,key_len);
+			strncat(element,"=",1);
+			strncat(element,Z_STRVAL_PP(data),Z_STRLEN_PP(data));		
+			
+		} else { //int (or resource, or whatever)=>string, only use the value
+			elsize=Z_STRLEN_PP(data);
+			element=estrdup(Z_STRVAL_PP(data));
+		}
+		*(argv + i++)="-o";
+		*(argv + i++)=element;
+		*(elements + j)=element;
 	}
 
 	*(argv + i++) = p;
@@ -1665,13 +1688,14 @@ static PHP_METHOD(Fuse, mount) {
 
 	add_property_string(object, "_mount_point", p, 1);
 
-	for(i=0; i < argc; i++)
-		php_printf("php_fuse argc[%d/%d]: %s\n",i+1,argc,argv[i]);
-
 	fuse_main(argc, argv, &op);
 
 	efree(p);
 	efree(argv);
+	
+	for(i=0;i<optsize;i++)
+		efree(elements[i]);
+	efree(elements);
 
 	FUSEG(active_object) = NULL;
 
